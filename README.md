@@ -51,6 +51,8 @@ whatever the isolation of the code that registers:
 +    )
 ```
 
+`Refresh` is defined under Usage.
+
 On macOS, the package's exit tests show both: a launch handler formed on the main actor traps when
 an Objective-C stand-in with `BGTaskScheduler`'s declaration calls it from a global queue, and a
 wake registered on the main actor through the same wiring as `system` returns.
