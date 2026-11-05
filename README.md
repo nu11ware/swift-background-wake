@@ -10,7 +10,7 @@ It does not submit task requests, choose when the next wake comes, or replace Sw
 - iOS 15, iPadOS 15, Mac Catalyst 15, tvOS 15 or visionOS 1. `WakeScheduler.system` exists on these platforms only, as `BGTaskScheduler` does.
 - macOS 12, watchOS 9 and Linux build the rest of the library, for tests.
 
-The library has no runtime dependencies. The tests use [swift-concurrency-extras](https://github.com/pointfreeco/swift-concurrency-extras) for `LockIsolated` and `UncheckedSendable`.
+The library has no runtime dependencies. Its tests use [swift-concurrency-extras](https://github.com/pointfreeco/swift-concurrency-extras).
 
 ## Installation
 
@@ -90,6 +90,12 @@ CI compiles `WakeScheduler.system` for iOS, Mac Catalyst, tvOS and visionOS, and
 ## Contributing
 
 Issues are open. Pull requests are by invitation: one is opened after it has been asked for on an issue.
+
+## Credits and thanks
+
+Most of what we know about advanced Swift we learned from [Point-Free](https://www.pointfree.co), from their episodes and their open-source libraries. Thank you.
+
+This package's tests use their [swift-concurrency-extras](https://github.com/pointfreeco/swift-concurrency-extras) for `LockIsolated`, `UncheckedSendable` and `withMainSerialExecutor`.
 
 ## Licence
 
