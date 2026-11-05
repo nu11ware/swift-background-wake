@@ -31,8 +31,10 @@
   @MainActor
   private func registerAWakeOnTheMainActorAndWake() {
     let standIn = UncheckedSendable(StandInScheduler())
-    let scheduler = WakeScheduler.backgroundTasks(of: StandInTask.self) { identifier, launchHandler in
-      standIn.value.register(forTaskWithIdentifier: identifier, using: nil, launchHandler: launchHandler)
+    let scheduler = WakeScheduler.backgroundTasks(of: StandInTask.self) {
+      identifier, launchHandler in
+      standIn.value.register(
+        forTaskWithIdentifier: identifier, using: nil, launchHandler: launchHandler)
     }
     scheduler.register("com.example.refresh", scheduleNext: {}, run: {})
     standIn.value.wakeOffTheMainThread()

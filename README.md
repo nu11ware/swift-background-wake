@@ -1,20 +1,122 @@
-# swift-background-wake
+# Background Wake
 
-Registers background task launch handlers that are safe to call off the main thread under Swift 6. Each wake runs its work as a cancellable `Task`. The system's expiration cancels it, and completion is reported once.
+[![CI](https://github.com/nu11ware/swift-background-wake/actions/workflows/ci.yml/badge.svg)](https://github.com/nu11ware/swift-background-wake/actions/workflows/ci.yml)
 
-It does not submit task requests, choose when the next wake comes, or replace SwiftUI's `backgroundTask(_:action:)` modifier.
+Cancelable, testable, and safe background tasks for Swift.
 
-## Requirements
+## Motivation
 
-- Swift 6.2 or later.
-- iOS 15, iPadOS 15, Mac Catalyst 15, tvOS 15 or visionOS 1. `WakeScheduler.system` exists on these platforms only, as `BGTaskScheduler` does.
-- macOS 12, watchOS 9 and Linux build the rest of the library, for tests.
+The usual place to register a `BGTaskScheduler` launch handler is the app delegate:
 
-The library has no runtime dependencies. Its tests use [swift-concurrency-extras](https://github.com/pointfreeco/swift-concurrency-extras).
+```swift
+import BackgroundTasks
+import UIKit
+
+final class AppDelegate: NSObject, UIApplicationDelegate {
+  func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    BGTaskScheduler.shared.register(
+      forTaskWithIdentifier: "com.example.refresh",
+      using: nil
+    ) { task in
+      task.setTaskCompleted(success: true)
+    }
+    return true
+  }
+}
+```
+
+Under Swift 6 this compiles without a warning, and traps with `SIGTRAP` the first time the system
+calls the launch handler. The app delegate is isolated to the main actor, so the closure is too,
+and Swift checks that isolation each time the closure is called. With `nil` for the queue, the
+system calls the launch handler on a default background queue, per `BGTaskScheduler.h`, and the
+check fails there.
+
+`WakeScheduler.system` forms the block it hands `BGTaskScheduler` in a closure no actor isolates,
+whatever the isolation of the code that registers:
+
+```diff
+-    BGTaskScheduler.shared.register(
+-      forTaskWithIdentifier: "com.example.refresh",
+-      using: nil
+-    ) { task in
+-      task.setTaskCompleted(success: true)
+-    }
++    WakeScheduler.system.register(
++      Refresh.identifier,
++      scheduleNext: { await Refresh.schedule() },
++      run: { await Refresh.run() }
++    )
+```
+
+On macOS, the package's exit tests show both: a launch handler formed on the main actor traps when
+an Objective-C stand-in with `BGTaskScheduler`'s declaration calls it from a global queue, and a
+wake registered on the main actor through the same wiring as `system` returns.
+
+Each wake runs its work in a Swift `Task`. The system's expiration cancels that `Task`, and
+completion is reported to the system once.
+
+## Usage
+
+List each identifier under `BGTaskSchedulerPermittedIdentifiers` in the app's `Info.plist`, and add
+`fetch` (for app refresh tasks) or `processing` (for processing tasks) to `UIBackgroundModes`.
+Register before the app finishes launching:
+
+```swift
+import BackgroundWake
+import UIKit
+
+final class AppDelegate: NSObject, UIApplicationDelegate {
+  func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    WakeScheduler.system.register(
+      Refresh.identifier,
+      scheduleNext: { await Refresh.schedule() },
+      run: { await Refresh.run() }
+    )
+    return true
+  }
+}
+```
+
+```swift
+import BackgroundTasks
+import Foundation
+
+enum Refresh {
+  static let identifier = "com.example.refresh"
+
+  static func schedule() async {
+    let request = BGAppRefreshTaskRequest(identifier: identifier)
+    request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60)
+    try? BGTaskScheduler.shared.submit(request)
+  }
+
+  static func run() async {
+    let feed = URL(string: "https://example.com/feed.json")!
+    _ = try? await URLSession.shared.data(from: feed)
+  }
+}
+```
+
+Each wake keeps the expiration handler, awaits `scheduleNext`, then `run`, then reports completion:
+success unless the system took the time back. When it does, `run` is cancelled, or skipped if it has
+not started; return from it promptly once cancelled. `register` returns `false` when the identifier
+is missing from `BGTaskSchedulerPermittedIdentifiers`, per `BGTaskScheduler.h`.
+
+In tests, create a `WakeScheduler` with `init(registerLaunchHandler:)` and call the launch handler
+it receives with a `WakeTask` of your own.
+
+The library does not submit task requests, choose when the next wake comes, or replace SwiftUI's
+`backgroundTask(_:action:)` modifier.
 
 ## Installation
 
-Add the package to `Package.swift`:
+Add the package to the dependencies in `Package.swift`:
 
 ```swift
 .package(url: "https://github.com/nu11ware/swift-background-wake", from: "0.1.0"),
@@ -26,77 +128,28 @@ Then add the product to a target:
 .product(name: "BackgroundWake", package: "swift-background-wake"),
 ```
 
-## Usage
+In an Xcode project, choose File > Add Package Dependencies, enter
+`https://github.com/nu11ware/swift-background-wake`, and add the `BackgroundWake` library to the app
+target.
 
-List each identifier under `BGTaskSchedulerPermittedIdentifiers` in the app's `Info.plist`, and add `fetch` (for app refresh tasks) or `processing` (for processing tasks) to `UIBackgroundModes`. Register before the app finishes launching:
-
-```swift
-import BackgroundTasks
-import BackgroundWake
-import UIKit
-
-final class AppDelegate: NSObject, UIApplicationDelegate {
-  func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-  ) -> Bool {
-    WakeScheduler.system.register(
-      "com.example.refresh",
-      scheduleNext: { await Refresh.schedule() },
-      run: { await Library.shared.refresh() }
-    )
-    return true
-  }
-}
-
-nonisolated enum Refresh {
-  static func schedule() async {
-    let request = BGAppRefreshTaskRequest(identifier: "com.example.refresh")
-    request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
-    if #available(iOS 27, *) {
-      try? await BGTaskScheduler.shared.submitTaskRequest(request)
-    } else {
-      try? BGTaskScheduler.shared.submit(request)
-    }
-  }
-}
-```
-
-`BGTaskScheduler.h` says not to call `submitTaskRequest(_:)` from the main thread, so `Refresh` is not isolated to the main actor.
-
-Each wake keeps the expiration handler, awaits `scheduleNext`, then `run`, then reports completion: success unless the system took the time back. When it does, `run` is cancelled, or skipped if it has not started; return from it promptly once cancelled. `register` returns `false` when the identifier is missing from `BGTaskSchedulerPermittedIdentifiers`.
-
-In tests, create a `WakeScheduler` with `init(registerLaunchHandler:)` and call the launch handler it receives with a `WakeTask` of your own.
-
-## Isolation
-
-`BGTaskScheduler.h` declares the launch handler of `register(forTaskWithIdentifier:using:launchHandler:)` as a plain block, with no isolation annotation. Under Swift 6, a closure written for that parameter in a main-actor context, such as an app delegate, is isolated to the main actor, and Swift checks that isolation each time the closure is called. With `nil` for the queue, the system calls the launch handler on a background queue, where that check fails. In the tests, on macOS, the failed check stops the process with `SIGTRAP`. `WakeScheduler.system` forms that block inside a `@Sendable` closure, which no actor isolates, whatever the isolation of the code that calls `register`.
-
-## Checks
-
-`swift test` runs on macOS and Linux. The tests call the launch handler and the expiration handler from global queues, through a stand-in scheduler and task, and show that:
-
-- the expiration handler is kept before the work starts, even when the work ends at once;
-- `scheduleNext` returns before `run` starts, and completion is reported after `run` returns;
-- the expiration cancels `run` and completion is reported as failure;
-- `run` is not called when the expiration comes first;
-- completion is reported once, however often the expiration arrives and however late;
-- `register` returns the scheduler's answer.
-
-On macOS, two exit tests use an Objective-C stand-in with the declaration of `BGTaskScheduler`'s registration method. A launch handler formed on the main actor traps when called off the main thread. A wake registered on the main actor, through the wiring `system` uses with the stand-in in place of `BGTaskScheduler`, returns.
-
-CI compiles `WakeScheduler.system` for iOS, Mac Catalyst, tvOS and visionOS, and the rest of the library for watchOS, but does not run `system`. `BGTaskScheduler.h` requires launch handlers to be registered before the app finishes launching, `BGContinuedProcessingTask` registrations excepted.
+The library needs Swift 6.2 or later and has no runtime dependencies. `WakeScheduler.system` exists
+on iOS 15, iPadOS 15, Mac Catalyst 15, tvOS 15 and visionOS 1, as `BGTaskScheduler` does. The rest
+of the library builds on macOS 12, watchOS 9 and Linux, for tests.
 
 ## Contributing
 
-Issues are open. Pull requests are by invitation: one is opened after it has been asked for on an issue.
+Issues are open. Pull requests are by invitation: one is opened after it has been asked for on an
+issue.
 
 ## Credits and thanks
 
-Most of what we know about advanced Swift we learned from [Point-Free](https://www.pointfree.co), from their episodes and their open-source libraries. Thank you.
+Most of what we know about advanced Swift we learned from [Point-Free](https://www.pointfree.co),
+from their episodes and their open-source libraries. Thank you.
 
-This package's tests use their [swift-concurrency-extras](https://github.com/pointfreeco/swift-concurrency-extras) for `LockIsolated`, `UncheckedSendable` and `withMainSerialExecutor`.
+This package's tests use their
+[swift-concurrency-extras](https://github.com/pointfreeco/swift-concurrency-extras) for
+`LockIsolated`, `UncheckedSendable` and `withMainSerialExecutor`.
 
-## Licence
+## License
 
-MIT. See [LICENSE](LICENSE).
+This library is released under the MIT license. See [LICENSE](LICENSE) for details.

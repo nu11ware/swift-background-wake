@@ -4,9 +4,21 @@
   extension WakeScheduler {
     /// The shared `BGTaskScheduler`.
     ///
-    /// The block it hands `register(forTaskWithIdentifier:using:launchHandler:)` is formed in this package, in a
-    /// closure no actor isolates, whatever the isolation of the code that calls ``register(_:scheduleNext:run:)``. It
-    /// passes `nil` for the queue, so the system calls the block on a background queue of its own.
+    /// The block it hands `register(forTaskWithIdentifier:using:launchHandler:)` is formed in this
+    /// package, in a closure no actor isolates, whatever the isolation of the code that calls
+    /// ``register(_:scheduleNext:run:)``. It passes `nil` for the queue, so the system calls the
+    /// block on a default background queue, per `BGTaskScheduler.h`. Register from the app
+    /// delegate, before the app finishes launching:
+    ///
+    /// ```swift
+    /// WakeScheduler.system.register(
+    ///   Refresh.identifier,
+    ///   scheduleNext: { await Refresh.schedule() },
+    ///   run: { await Refresh.run() }
+    /// )
+    /// ```
+    ///
+    /// <doc:Isolation> explains why the block does not trap there.
     public static var system: WakeScheduler {
       backgroundTasks(of: BGTask.self) { identifier, launchHandler in
         BGTaskScheduler.shared.register(
@@ -28,22 +40,24 @@ package protocol SystemTask: AnyObject, SendableMetatype {
 }
 
 extension WakeScheduler {
-  /// The wiring of ``system``, for any scheduler whose tasks have the members of `BGTask` a wake uses.
+  /// The wiring of ``system``, for any scheduler whose tasks have the members of `BGTask` a wake
+  /// uses.
   ///
   /// The launch handler handed to `register` is formed here, in a closure no actor isolates.
-  package static func backgroundTasks<Task: SystemTask>(
-    of _: Task.Type,
-    register: @escaping @Sendable (
-      _ identifier: String, _ launchHandler: @escaping (Task) -> Void
-    ) -> Bool
+  package static func backgroundTasks<BackgroundTask: SystemTask>(
+    of _: BackgroundTask.Type,
+    register:
+      @escaping @Sendable (
+        _ identifier: String, _ launchHandler: @escaping (BackgroundTask) -> Void
+      ) -> Bool
   ) -> WakeScheduler {
     WakeScheduler { identifier, launchHandler in
-      register(identifier) { task in
-        let task = CarriedTask(task: task)
+      register(identifier) { backgroundTask in
+        let carried = CarriedTask(backgroundTask: backgroundTask)
         launchHandler(
           WakeTask(
-            onExpiration: { handler in task.task.expirationHandler = handler },
-            finish: { success in task.task.setTaskCompleted(success: success) }
+            onExpiration: { handler in carried.backgroundTask.expirationHandler = handler },
+            finish: { success in carried.backgroundTask.setTaskCompleted(success: success) }
           )
         )
       }
@@ -51,8 +65,9 @@ extension WakeScheduler {
   }
 }
 
-/// A task carried across queues. `BGTask.h` names no queue for the two members, and a wake uses each once: the
-/// expiration handler is kept from the launch handler, and completion is reported when the work ends.
-private struct CarriedTask<Task: SystemTask>: @unchecked Sendable {
-  let task: Task
+/// A task carried across queues. `BGTask.h` names no queue for the two members, and a wake uses
+/// each once: the expiration handler is kept from the launch handler, and completion is reported
+/// when the work ends.
+private struct CarriedTask<BackgroundTask: SystemTask>: @unchecked Sendable {
+  let backgroundTask: BackgroundTask
 }

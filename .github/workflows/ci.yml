@@ -5,6 +5,7 @@ on:
     branches: [main]
     tags: ["*"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,24 +16,42 @@ concurrency:
 
 jobs:
   linux:
+    name: Linux (Swift 6.2)
     runs-on: ubuntu-latest
     container: swift:6.2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: swift test
+      - name: Check formatting
+        run: swift format lint --strict --recursive Package.swift Sources Tests Examples
+      - name: Run debug tests
+        run: swift test -c debug
+      - name: Run release tests
+        run: swift test -c release
 
   macos:
-    if: ${{ !github.event.repository.private }}
+    name: macOS
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: swift test
-      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=iOS
-      - run: xcodebuild build -scheme swift-background-wake -destination 'generic/platform=macOS,variant=Mac Catalyst'
-      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=tvOS
-      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=visionOS
-      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=watchOS
+      - name: Run tests
+        run: swift test
+      - name: Build for iOS
+        run: xcodebuild build -scheme swift-background-wake -destination generic/platform=iOS
+      - name: Build the README examples for iOS
+        run: |
+          for target in MotivationExample UsageExample; do
+            swift build --target "$target" --triple arm64-apple-ios15.0 \
+              --sdk "$(xcrun --sdk iphoneos --show-sdk-path)" --scratch-path .build/ios
+          done
+      - name: Build for Mac Catalyst
+        run: xcodebuild build -scheme swift-background-wake -destination 'generic/platform=macOS,variant=Mac Catalyst'
+      - name: Build for tvOS
+        run: xcodebuild build -scheme swift-background-wake -destination generic/platform=tvOS
+      - name: Build for visionOS
+        run: xcodebuild build -scheme swift-background-wake -destination generic/platform=visionOS
+      - name: Build for watchOS
+        run: xcodebuild build -scheme swift-background-wake -destination generic/platform=watchOS

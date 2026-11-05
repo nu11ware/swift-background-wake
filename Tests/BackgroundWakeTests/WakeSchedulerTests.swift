@@ -3,7 +3,7 @@ import ConcurrencyExtras
 import Testing
 
 @Suite(.serialized)
-struct WakeTests {
+struct WakeSchedulerTests {
   @Test func aWakeKeepsTheExpirationHandlerThenSchedulesTheNextThenRunsThenReportsSuccess() async {
     let system = StandInSystem()
     system.scheduler.register(
@@ -110,7 +110,8 @@ struct WakeTests {
       await system.expire()
       await Task.megaYield()
 
-      #expect(system.events.value == ["expiration handler kept", "run returned", "finished(false)"])
+      #expect(
+        system.events.value == ["expiration handler kept", "run returned", "finished(false)"])
     }
   }
 

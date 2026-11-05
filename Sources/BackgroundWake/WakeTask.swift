@@ -8,8 +8,9 @@ public struct WakeTask: Sendable {
   /// Creates a task from its two calls.
   ///
   /// - Parameters:
-  ///   - onExpiration: Keeps `handler`, to be called when the system takes the time back. A wake calls this once,
-  ///     from the launch handler, before the work starts. The system may call `handler` on any queue.
+  ///   - onExpiration: Keeps `handler`, to be called when the system takes the time back. A wake
+  ///     calls this once, from the launch handler, before the work starts. The system may call
+  ///     `handler` on any queue.
   ///   - finish: Reports that the work is over. A wake calls this exactly once, from any queue.
   public init(
     onExpiration: @escaping @Sendable (_ handler: @escaping @Sendable () -> Void) -> Void,

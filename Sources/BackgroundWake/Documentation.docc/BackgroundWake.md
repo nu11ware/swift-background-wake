@@ -1,22 +1,34 @@
 # ``BackgroundWake``
 
-Registers background task launch handlers that are safe to call off the main thread under Swift 6.
+Cancelable, testable, and safe background tasks for Swift.
 
 ## Overview
 
-Each wake keeps the expiration handler, then runs its work as a cancellable `Task`. The system's expiration cancels it, and completion is reported once. Register with ``WakeScheduler/system`` before the app finishes launching:
+A wake is the work an app does each time the system launches one of its background tasks. Register
+it with ``WakeScheduler/system`` before the app finishes launching:
 
 ```swift
 WakeScheduler.system.register(
-  "com.example.refresh",
+  Refresh.identifier,
   scheduleNext: { await Refresh.schedule() },
-  run: { await Library.shared.refresh() }
+  run: { await Refresh.run() }
 )
 ```
 
-``WakeScheduler/system`` forms the block it hands `BGTaskScheduler` in a closure no actor isolates, so the Swift 6 isolation check of a main-actor closure does not fail when the system calls the block on a background queue. It exists on iOS, iPadOS, Mac Catalyst, tvOS and visionOS. The package's README covers requirements, installation, the full example and what the tests show.
+Each wake keeps the expiration handler, then runs `scheduleNext` and `run` in a `Task`. The
+system's expiration cancels that `Task`, and completion is reported once. The block handed to
+`BGTaskScheduler` is formed in a closure no actor isolates, so it does not trap when the system
+calls it on a background queue under Swift 6.
+
+``WakeScheduler/system`` exists on iOS, iPadOS, Mac Catalyst, tvOS and visionOS. The rest of the
+library builds on macOS, watchOS and Linux, for tests.
 
 ## Topics
+
+### Essentials
+
+- <doc:Isolation>
+- <doc:Testing>
 
 ### Registering a wake
 

@@ -32,6 +32,26 @@ let package = Package(
       name: "StandInBackgroundTasks",
       path: "Tests/StandInBackgroundTasks"
     ),
+    .target(
+      name: "MotivationExample",
+      path: "Examples/Motivation"
+    ),
+    .target(
+      name: "UsageExample",
+      dependencies: ["BackgroundWake"],
+      path: "Examples/Usage"
+    ),
   ],
   swiftLanguageModes: [.v6]
 )
+
+for target in package.targets where target.name != "StandInBackgroundTasks" {
+  target.swiftSettings = target.swiftSettings ?? []
+  target.swiftSettings?.append(contentsOf: [
+    .enableUpcomingFeature("ExistentialAny"),
+    .enableUpcomingFeature("ImmutableWeakCaptures"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+  ])
+}

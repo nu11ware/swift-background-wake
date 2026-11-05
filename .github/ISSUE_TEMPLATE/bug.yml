@@ -1,5 +1,6 @@
 name: Bug
 description: The library did something other than its documentation says.
+labels: [bug]
 body:
   - type: textarea
     id: observed
@@ -23,6 +24,13 @@ body:
     attributes:
       label: Platform and OS version
       placeholder: iOS 27.0
+    validations:
+      required: true
+  - type: input
+    id: xcode
+    attributes:
+      label: Xcode version
+      placeholder: "27.0"
     validations:
       required: true
   - type: input
