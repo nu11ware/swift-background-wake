@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: swift test
+
+  macos:
+    if: ${{ !github.event.repository.private }}
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: swift test
+      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=iOS
+      - run: xcodebuild build -scheme swift-background-wake -destination 'generic/platform=macOS,variant=Mac Catalyst'
+      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=tvOS
+      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=visionOS
+      - run: xcodebuild build -scheme swift-background-wake -destination generic/platform=watchOS
