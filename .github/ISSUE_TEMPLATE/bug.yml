@@ -1,0 +1,49 @@
+name: Bug
+description: The library did something other than its documentation says.
+labels: [bug]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What was expected
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Code that shows it
+      render: swift
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and OS version
+      placeholder: iOS 27.0
+    validations:
+      required: true
+  - type: input
+    id: xcode
+    attributes:
+      label: Xcode version
+      placeholder: "27.0"
+    validations:
+      required: true
+  - type: input
+    id: swift
+    attributes:
+      label: Swift version
+      placeholder: "6.2"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      placeholder: 0.1.0
+    validations:
+      required: true
